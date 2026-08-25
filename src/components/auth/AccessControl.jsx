@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle } from "lucide-react";
-import { PAGE_PERMISSIONS, ENTITY_PERMISSIONS, isDivisionRole, isFlotillaRole, hasEntityPermission, canAccessFlotilla as canAccessFlotillaHelper, canManageUser, canManageFinancials } from "./RoleConfig";
+import { PAGE_PERMISSIONS, PAGE_REQUIREMENTS, ENTITY_PERMISSIONS, isDivisionRole, isFlotillaRole, hasEntityPermission, canAccessFlotilla as canAccessFlotillaHelper, canManageUser, canManageFinancials } from "./RoleConfig";
 
 export function useAuth() {
   const [user, setUser] = useState(null);
@@ -197,11 +197,43 @@ export function RequireAuth({ children, pageName }) {
 }
 
 // New role-based access check
+/**
+ * Page access, resolved against the database wherever possible.
+ *
+ * Order of precedence:
+ *   1. Super Admin passes everything.
+ *   2. If the page maps to a real permission (entity:action), test the grants
+ *      that came back from the database with the session. This is the path
+ *      that keeps the UI in step with role_permission automatically.
+ *   3. Otherwise fall back to the legacy hardcoded role list, so pages that
+ *      have not been mapped yet keep working.
+ */
 export function hasPageAccess(user, pageName) {
   if (!user) return false;
+  if (user.is_super_admin) return true;
+
+  // An explicit null means "open to anyone on the roster".
+  if (pageName in PAGE_REQUIREMENTS) {
+    const req = PAGE_REQUIREMENTS[pageName];
+    if (req === null) return true;
+    if (req && Array.isArray(user.permissions)) {
+      return user.permissions.includes(`${req.entity}:${req.action}`);
+    }
+  }
+
   const pagePerms = PAGE_PERMISSIONS[pageName];
   if (!pagePerms) return true;
-  
+
   const roles = user.role_assignments || [];
   return roles.some(r => pagePerms.allowedRoles.includes(r.role));
+}
+
+/**
+ * Whether the member may perform a qualification-gated action, e.g. recording
+ * a vessel exam. Mirrors the database gate in qualification_permission, so the
+ * button is hidden for the same reason the insert would be refused.
+ */
+export function hasQualification(user, code) {
+  if (!user) return false;
+  return (user.current_qualifications || []).includes(code);
 }
