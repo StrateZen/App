@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Anchor, Mail, CheckCircle2, AlertCircle } from 'lucide-react';
 
@@ -10,10 +9,56 @@ import { Anchor, Mail, CheckCircle2, AlertCircle } from 'lucide-react';
  * Rendered OUTSIDE the auth gate in App.jsx — otherwise requesting a link
  * would require already being signed in, which is a closed loop.
  */
+/**
+ * Supabase reports failures by appending them to the URL hash, e.g.
+ *   #error=access_denied&error_code=otp_expired&error_description=...
+ * Unread, that renders as a blank page with no explanation.
+ */
+function readHashError() {
+  if (typeof window === 'undefined') return null;
+  const hash = window.location.hash;
+  if (!hash || !hash.includes('error')) return null;
+
+  const params = new URLSearchParams(hash.replace(/^#/, ''));
+  const code = params.get('error_code');
+  const description = params.get('error_description');
+
+  // The common case by far: a mail security scanner opened the link before the
+  // recipient did. Magic links are single use, so the human's click arrives
+  // second and finds the token already spent.
+  if (code === 'otp_expired') {
+    return {
+      title: 'That sign-in link was already used',
+      body: 'Links can only be opened once, and some email systems open them ' +
+            'automatically to scan for threats. Request a new one below.',
+    };
+  }
+  if (code === 'access_denied') {
+    return {
+      title: 'Sign-in was declined',
+      body: description ? description.replace(/\+/g, ' ') : 'Request a new link below.',
+    };
+  }
+  return {
+    title: 'Sign-in did not complete',
+    body: description ? description.replace(/\+/g, ' ') : 'Request a new link below.',
+  };
+}
+
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState('idle'); // idle | sending | sent | error
   const [errorMessage, setErrorMessage] = useState('');
+  const [hashError, setHashError] = useState(null);
+
+  useEffect(() => {
+    const parsed = readHashError();
+    if (parsed) {
+      setHashError(parsed);
+      // Clear the hash so a refresh does not resurface a stale error.
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
 
   const submit = async () => {
     const trimmed = email.trim();
@@ -55,6 +100,18 @@ export default function LoginPage() {
               U.S. Coast Guard Auxiliary
             </p>
           </div>
+
+          {hashError && status !== 'sent' && (
+            <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-amber-900">{hashError.title}</p>
+                  <p className="text-xs text-amber-800 mt-1">{hashError.body}</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {status === 'sent' ? (
             <div className="text-center py-4">
