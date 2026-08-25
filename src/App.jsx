@@ -20,9 +20,15 @@ const LayoutWrapper = ({ children, currentPageName }) => Layout ?
   : <>{children}</>;
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, navigateToLogin } = useAuth();
+  const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated } = useAuth();
   const location = useLocation();
   const isLoginRoute = location.pathname === '/login';
+
+  // Supabase reports a failed sign-in by redirecting to the site root with the
+  // details in the URL hash. Render the login page in place rather than
+  // redirecting, which would discard the hash and lose the explanation.
+  const hasAuthErrorInUrl =
+    typeof window !== 'undefined' && window.location.hash.includes('error');
 
   // Show loading spinner while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {
@@ -36,7 +42,7 @@ const AuthenticatedApp = () => {
   // The login route must render whether or not there is a session. Gating it
   // behind auth would mean needing to be signed in to sign in -- which is the
   // redirect loop this fixes.
-  if (isLoginRoute) {
+  if (isLoginRoute || (!isAuthenticated && hasAuthErrorInUrl)) {
     return isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />;
   }
 
@@ -45,9 +51,8 @@ const AuthenticatedApp = () => {
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
     } else if (authError.type === 'auth_required') {
-      // Redirect to login automatically
-      navigateToLogin();
-      return null;
+      // Client-side redirect: no full page reload, so no blank flash.
+      return <Navigate to="/login" replace />;
     }
   }
 
