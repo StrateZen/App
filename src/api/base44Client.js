@@ -296,12 +296,42 @@ const auth = {
         .eq('member_id', member.id),
     ]);
 
+    const roleCodes = [...new Set((offices ?? []).map((o) => o.role_code))];
+
+    // Pull the actual permission grants for these roles, plus whether any of
+    // them is a super role. Deriving access from the database is what keeps the
+    // UI from drifting out of step with the permission model: adding a role or
+    // regranting a permission needs no code change.
+    const [{ data: grants }, { data: roleRows }] = await Promise.all([
+      roleCodes.length
+        ? supabase.from('role_permission').select('entity, action').in('role_code', roleCodes)
+        : Promise.resolve({ data: [] }),
+      roleCodes.length
+        ? supabase.from('role').select('code, is_super, scope').in('code', roleCodes)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    const isSuper = (roleRows ?? []).some((r) => r.is_super);
+
+    // "entity:action" strings, cheap to test against.
+    const permissions = [...new Set((grants ?? []).map((g) => `${g.entity}:${g.action}`))];
+
+    // Qualifications the member currently holds and that have not lapsed.
+    const currentQualifications = (quals ?? [])
+      .filter((q) => q.active &&
+        (!q.currency_expires_date || new Date(q.currency_expires_date) >= new Date()))
+      .map((q) => q.qualification_code);
+
     return {
       ...withLegacyFields(member),
       role_assignments: (offices ?? []).map((o) => ({
         role: o.role_code, flotilla_id: o.flotilla_id,
       })),
       qualifications: quals ?? [],
+      current_qualifications: currentQualifications,
+      permissions,
+      is_super_admin: isSuper,
+      role_scopes: Object.fromEntries((roleRows ?? []).map((r) => [r.code, r.scope])),
     };
   },
 
