@@ -375,5 +375,41 @@ const Core = {
   ExtractDataFromUploadedFile: notImplemented('ExtractDataFromUploadedFile'),
 };
 
-export const base44 = { entities, auth, functions, integrations: { Core } };
+// ---------------------------------------------------------------------------
+// appLogs — base44 recorded per-page analytics. There is no Supabase
+// equivalent and the app treats it as fire-and-forget, so this resolves
+// silently rather than throwing. NavigationTracker calls it on every route
+// change; an undefined namespace there crashes the whole app on first render.
+// ---------------------------------------------------------------------------
+const appLogs = {
+  async logUserInApp(_pageName) {
+    return { logged: false };
+  },
+};
+
+// ---------------------------------------------------------------------------
+// users — base44's invitation system. In the rebuild, access comes from being
+// on the roster: add a member row, and they can sign in with a magic link.
+// Creating the member is the invitation.
+// ---------------------------------------------------------------------------
+const users = {
+  async inviteUser(email, _role) {
+    const trimmed = (email || '').trim().toLowerCase();
+    if (!trimmed) throw new Error('An email address is required.');
+
+    const { data: existing } = await supabase
+      .from('member').select('id').eq('email', trimmed).maybeSingle();
+    if (existing) throw new Error(`${trimmed} is already on the roster.`);
+
+    // RLS decides whether the caller may add members.
+    const { data, error } = await supabase
+      .from('member').insert({ email: trimmed, full_name: trimmed, active: true })
+      .select().single();
+    if (error) throw new Error(`Could not add ${trimmed}: ${error.message}`);
+
+    return { invited: true, member: decorate(data, 'User') };
+  },
+};
+
+export const base44 = { entities, auth, functions, integrations: { Core }, appLogs, users };
 export default base44;
