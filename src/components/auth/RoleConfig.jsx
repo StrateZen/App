@@ -17,6 +17,12 @@ export const ROLES = {
   SO_PE: 'SO-PE',
   SO_SR: 'SO-SR',
   SO_VE: 'SO-VE',
+  SO_AS: 'SO-AS',
+  SO_DV: 'SO-DV',
+  SO_NS: 'SO-NS',
+  SO_PV: 'SO-PV',
+  SO_SC: 'SO-SC',
+  SO_HR: 'SO-HR',
   DIVISION_AUDIT: 'Division Audit Committee',
   // Flotilla roles
   FLOTILLA_COMMANDER: 'Flotilla Commander',
@@ -35,10 +41,23 @@ export const ROLES = {
   FSO_PE: 'FSO-PE',
   FSO_SR: 'FSO-SR',
   FSO_VE: 'FSO-VE',
-  VE: 'Vessel Examiner',
+  FSO_AS: 'FSO-AS',
+  FSO_DV: 'FSO-DV',
+  FSO_NS: 'FSO-NS',
+  FSO_PV: 'FSO-PV',
+  FSO_SC: 'FSO-SC',
   FLOTILLA_AUDIT: 'Flotilla Audit Committee',
-  MEMBER: 'Auxiliarist'
+  MEMBER: 'Auxiliarist',
+  // Immediate Past Commanders hold the sitting officer's full grant set.
+  IPDCDR: 'Immediate Past Division Commander',
+  IPFC: 'Immediate Past Flotilla Commander'
 };
+
+// NOTE: 'Vessel Examiner' was removed. It is a QUALIFICATION, not a role --
+// tracked in member_qualification with an expiry date. Page access to Vessel
+// Exams comes from the vessel_exam:view permission; the ability to record an
+// exam is gated on holding a current VE qualification.
+
 
 export const DIVISION_ROLES = [
   ROLES.SUPER_ADMIN,
@@ -57,7 +76,14 @@ export const DIVISION_ROLES = [
   ROLES.SO_PE,
   ROLES.SO_SR,
   ROLES.SO_VE,
-  ROLES.DIVISION_AUDIT
+  ROLES.SO_AS,
+  ROLES.SO_DV,
+  ROLES.SO_NS,
+  ROLES.SO_PV,
+  ROLES.SO_SC,
+  ROLES.SO_HR,
+  ROLES.DIVISION_AUDIT,
+  ROLES.IPDCDR
 ];
 
 export const FLOTILLA_ROLES = [
@@ -77,9 +103,14 @@ export const FLOTILLA_ROLES = [
   ROLES.FSO_PE,
   ROLES.FSO_SR,
   ROLES.FSO_VE,
-  ROLES.VE,
+  ROLES.FSO_AS,
+  ROLES.FSO_DV,
+  ROLES.FSO_NS,
+  ROLES.FSO_PV,
+  ROLES.FSO_SC,
   ROLES.FLOTILLA_AUDIT,
-  ROLES.MEMBER
+  ROLES.MEMBER,
+  ROLES.IPFC
 ];
 
 export function isDivisionRole(role) {
@@ -124,7 +155,7 @@ export const PAGE_PERMISSIONS = {
     allowedRoles: [ROLES.SUPER_ADMIN, ROLES.DIVISION_COMMANDER, ROLES.VICE_DIVISION_COMMANDER, ROLES.SO_FN]
   },
   VesselExams: {
-    allowedRoles: [ROLES.SUPER_ADMIN, ROLES.SO_VE, ROLES.FSO_VE, ROLES.VE, ROLES.DIVISION_COMMANDER, ROLES.VICE_DIVISION_COMMANDER, ROLES.FLOTILLA_COMMANDER, ROLES.VICE_FLOTILLA_COMMANDER]
+    allowedRoles: [ROLES.SUPER_ADMIN, ROLES.SO_VE, ROLES.FSO_VE, ROLES.DIVISION_COMMANDER, ROLES.VICE_DIVISION_COMMANDER, ROLES.FLOTILLA_COMMANDER, ROLES.VICE_FLOTILLA_COMMANDER]
   },
   SuperAdmin: {
     allowedRoles: [ROLES.SUPER_ADMIN]
@@ -157,6 +188,34 @@ export const PAGE_PERMISSIONS = {
   UserProfile: {
     allowedRoles: Object.values(ROLES)
   }
+};
+
+// Page -> the database permission that governs it. hasPageAccess prefers this
+// over the role lists above, so access follows the grants in role_permission
+// rather than a hardcoded list that has to be kept in sync by hand.
+export const PAGE_REQUIREMENTS = {
+  Dashboard:              { entity: 'transaction',        action: 'view' },
+  FlotillaDashboard:      { entity: 'transaction',        action: 'view' },
+  Transactions:           { entity: 'transaction',        action: 'view' },
+  Budgets:                { entity: 'budget',             action: 'view' },
+  Reports:                { entity: 'report_schedule',    action: 'view' },
+  Analytics:              { entity: 'transaction',        action: 'view' },
+  BankReconciliation:     { entity: 'bank_account',       action: 'reconcile' },
+  AuditCommittee:         { entity: 'committee',          action: 'view' },
+  AuditTrail:             { entity: 'transaction',        action: 'audit' },
+  VesselExams:            { entity: 'vessel_exam',        action: 'view' },
+  DivisionSettings:       { entity: 'division',           action: 'manage_settings' },
+  Flotillas:              { entity: 'flotilla',           action: 'edit' },
+  UserManagement:         { entity: 'member',             action: 'edit' },
+  RoleManagement:         { entity: 'member',             action: 'assign_roles' },
+  PayeeVendors:           { entity: 'payee_vendor',       action: 'view' },
+  VolunteerReports:       { entity: 'volunteer_activity', action: 'view_all' },
+  // Everyone on the roster may use these; no grant required.
+  Search:                 null,
+  UserProfile:            null,
+  UserSettings:           null,
+  VolunteerActivityHours: null,
+  Logout:                 null,
 };
 
 // Granular entity-level permissions
