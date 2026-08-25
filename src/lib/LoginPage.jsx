@@ -8,8 +8,7 @@ import { Anchor, Mail, CheckCircle2, AlertCircle } from 'lucide-react';
  *
  * Rendered OUTSIDE the auth gate in App.jsx — otherwise requesting a link
  * would require already being signed in, which is a closed loop.
- */
-/**
+ *
  * Supabase reports failures by appending them to the URL hash, e.g.
  *   #error=access_denied&error_code=otp_expired&error_description=...
  * Unread, that renders as a blank page with no explanation.
