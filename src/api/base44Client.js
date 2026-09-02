@@ -68,7 +68,66 @@ const ENTITY_SELECT = {
 
 // Read-side shaping: present rebuilt columns under the names the UI reads.
 // Without this the pages render blanks rather than failing loudly.
+// The USCG 7012 requirement rows, in official order. The UI keys these by
+// name with true/false/null; the database and the PDF generator key them by
+// row number with pass/fail/na. Translating here keeps both sides unchanged.
+const REQUIREMENT_ORDER = [
+  'display_of_numbers', 'registration_documentation', 'personal_flotation_devices',
+  'visual_distress_signals', 'fire_extinguishers', 'ventilation',
+  'backfire_flame_control', 'sound_producing_devices', 'navigation_lights',
+  'pollution_placard', 'marpol_trash_placard', 'marine_sanitation_devices',
+  'navigation_rules', 'state_local_requirements', 'engine_cutoff_switch',
+];
+
+/** UI shape -> stored shape: { pfd: true } becomes { "3": "pass" }. */
+const requirementsToStored = (ui) => {
+  if (!ui || typeof ui !== 'object') return ui;
+  // Already numeric-keyed (e.g. a round trip); leave it alone.
+  if (Object.keys(ui).some((k) => /^\d+$/.test(k))) return ui;
+
+  const out = {};
+  REQUIREMENT_ORDER.forEach((name, idx) => {
+    const v = ui[name];
+    if (v === true) out[String(idx + 1)] = 'pass';
+    else if (v === false) out[String(idx + 1)] = 'fail';
+    else if (v === null && name in ui) out[String(idx + 1)] = 'na';
+  });
+  return out;
+};
+
+/** Stored shape -> UI shape, so the form repopulates correctly on edit. */
+const requirementsToUi = (stored) => {
+  if (!stored || typeof stored !== 'object') return stored;
+  if (!Object.keys(stored).some((k) => /^\d+$/.test(k))) return stored;
+
+  const out = {};
+  REQUIREMENT_ORDER.forEach((name, idx) => {
+    const v = stored[String(idx + 1)];
+    out[name] = v === 'pass' ? true : v === 'fail' ? false : null;
+  });
+  return out;
+};
+
+// Write-side shaping: reconcile what the UI sends with what the table has.
+const ENTITY_WRITE_TRANSFORMS = {
+  VesselExam: (data) => {
+    const { examiner_id, examiner_name, ...rest } = data || {};
+    const out = { ...rest };
+    // The table records the examiner as a member reference. There is no
+    // name column: the name is looked up, never copied, so it cannot go stale.
+    if (examiner_id) out.examiner_member_id = examiner_id;
+    if (out.requirements) out.requirements = requirementsToStored(out.requirements);
+    return out;
+  },
+};
+
 const ENTITY_READ_TRANSFORMS = {
+  VesselExam: (row) => ({
+    ...row,
+    // Give the form back the shape it expects, plus the legacy alias.
+    examiner_id: row.examiner_member_id,
+    requirements: requirementsToUi(row.requirements),
+  }),
   AuditLog: (row) => ({
     ...row,
     created_date: row.occurred_at,
@@ -105,9 +164,10 @@ const decorate = (data, entity) =>
                       : shapeRow(data, entity);
 
 /** Strip legacy aliases before writing, so Postgres never sees created_date. */
-const stripLegacyFields = (data) => {
+const stripLegacyFields = (data, entity) => {
   const { created_date, updated_date, ...rest } = data || {};
-  return rest;
+  const transform = entity && ENTITY_WRITE_TRANSFORMS[entity];
+  return transform ? transform(rest) : rest;
 };
 
 /** base44 sort strings: 'name' ascending, '-created_date' descending. */
@@ -158,7 +218,7 @@ function makeEntity(name) {
 
     async create(payload) {
       const { data, error } = await supabase
-        .from(table).insert(stripLegacyFields(payload)).select().single();
+        .from(table).insert(stripLegacyFields(payload, name)).select().single();
       raise(error, name, 'create');
       return decorate(data, name);
     },
@@ -166,14 +226,14 @@ function makeEntity(name) {
     async bulkCreate(rows = []) {
       if (!rows.length) return [];
       const { data, error } = await supabase
-        .from(table).insert(rows.map(stripLegacyFields)).select();
+        .from(table).insert(rows.map((r) => stripLegacyFields(r, name))).select();
       raise(error, name, 'bulkCreate');
       return decorate(data ?? [], name);
     },
 
     async update(id, payload) {
       const { data, error } = await supabase
-        .from(table).update(stripLegacyFields(payload)).eq('id', id).select().single();
+        .from(table).update(stripLegacyFields(payload, name)).eq('id', id).select().single();
       raise(error, name, 'update');
       return decorate(data, name);
     },
