@@ -5,8 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Anchor, Plus, Search, FileText, Calendar } from "lucide-react";
-import { RequireAuth, useRolePermissions } from "../components/auth/AccessControl";
+import { Anchor, Plus, Search, FileText, Calendar, ShieldAlert } from "lucide-react";
+import { RequireAuth, useRolePermissions, hasQualification } from "../components/auth/AccessControl";
 import VesselExamForm7012 from "../components/vesselexams/VesselExamForm7012";
 import VesselExamForm7066 from "../components/vesselexams/VesselExamForm7066";
 import VesselExamForm7008 from "../components/vesselexams/VesselExamForm7008";
@@ -24,6 +24,11 @@ export default function VesselExamsPage() {
 function VesselExamsContent() {
   const { user, getUserFlotillaIds } = useRolePermissions();
   const userFlotillaIds = getUserFlotillaIds();
+
+  // Recording an exam requires a CURRENT Vessel Examiner qualification. The
+  // database enforces this regardless; hiding the control means a lapsed VE
+  // finds out before filling in a form, not after submitting one.
+  const isCurrentVE = hasQualification(user, 'VE');
   
   const [selectedFormType, setSelectedFormType] = useState("7012_vsc");
   const [showForm, setShowForm] = useState(false);
@@ -211,10 +216,25 @@ function VesselExamsContent() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Button onClick={handleNewExam} className="gap-2 bg-blue-600 hover:bg-blue-700">
-                    <Plus className="w-4 h-4" />
-                    New Exam
-                  </Button>
+                  {isCurrentVE ? (
+                    <Button onClick={handleNewExam} className="gap-2 bg-blue-600 hover:bg-blue-700">
+                      <Plus className="w-4 h-4" />
+                      New Exam
+                    </Button>
+                  ) : (
+                    <div
+                      className="flex items-start gap-2 rounded-lg border border-amber-200
+                                 bg-amber-50 px-3 py-2 max-w-md"
+                      title="Recording an exam requires a current Vessel Examiner qualification."
+                    >
+                      <ShieldAlert className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                      <div className="text-xs text-amber-900">
+                        <span className="font-medium">Vessel Examiner qualification required.</span>{' '}
+                        You can view and reprint exams. Recording one requires a current VE
+                        qualification &mdash; contact your FSO-MT if yours has lapsed.
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
             </div>
