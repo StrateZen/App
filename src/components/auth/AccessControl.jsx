@@ -15,7 +15,6 @@ export function useAuth() {
   const loadUser = async () => {
     try {
       const currentUser = await base44.auth.me();
-      console.log("AccessControl - User loaded:", currentUser);
       setUser(currentUser);
     } catch (error) {
       console.error("Not authenticated", error);
@@ -34,34 +33,26 @@ export function useRolePermissions() {
 
   const getUserRoles = () => {
     if (!user) {
-      console.log("getUserRoles - No user");
       return [];
     }
     
-    console.log("getUserRoles - User:", user);
-    
     // Support new role_assignments
     if (user.role_assignments && Array.isArray(user.role_assignments) && user.role_assignments.length > 0) {
-      console.log("getUserRoles - Using role_assignments:", user.role_assignments);
       return user.role_assignments;
     }
     
     // Legacy fallback for users not yet migrated to role system
     if (user.access_level === 'super_admin') {
-      console.log("getUserRoles - Legacy super_admin");
       return [{ role: 'Super Admin', flotilla_id: null }];
     }
     if (user.access_level === 'division_staff') {
-      console.log("getUserRoles - Legacy division_staff");
       return [{ role: 'SO-FN', flotilla_id: null }];
     }
     if (user.access_level === 'flotilla_staff' && user.flotilla_ids) {
-      console.log("getUserRoles - Legacy flotilla_staff");
       return user.flotilla_ids.map(fid => ({ role: 'FSO-FN', flotilla_id: fid }));
     }
     
     // Default fallback - give basic member access
-    console.log("getUserRoles - Default fallback to Auxiliarist");
     return [{ role: 'Auxiliarist', flotilla_id: null }];
   };
 
@@ -91,14 +82,11 @@ export function useRolePermissions() {
     return userFlotillaIds.includes(flotillaId);
   };
 
-  const canAccessPage = (pageName) => {
-    if (!user) return false;
-    const pagePerms = PAGE_PERMISSIONS[pageName];
-    if (!pagePerms) return true; // No restrictions
-    
-    const roles = getUserRoles();
-    return roles.some(r => pagePerms.allowedRoles.includes(r.role));
-  };
+  // Delegates to hasPageAccess so the sidebar and the page guard cannot
+  // disagree. They previously held separate copies of this logic, which meant
+  // the nav could offer a link that the page then refused -- the exact drift
+  // the database-driven permission model exists to prevent.
+  const canAccessPage = (pageName) => hasPageAccess(user, pageName);
 
   const canWriteComponent = () => true;
 
@@ -150,8 +138,6 @@ export function useFlotillaFilter() {
 export function RequireAuth({ children, pageName }) {
   const { user, loading, canAccessPage } = useRolePermissions();
 
-  console.log("RequireAuth - loading:", loading, "user:", user, "pageName:", pageName);
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-50">
@@ -164,7 +150,6 @@ export function RequireAuth({ children, pageName }) {
   }
 
   if (!user) {
-    console.log("RequireAuth - No user, returning null");
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-50">
         <div className="text-center">
@@ -176,7 +161,6 @@ export function RequireAuth({ children, pageName }) {
 
   // New role-based check
   if (pageName && !canAccessPage(pageName)) {
-    console.log("RequireAuth - Access denied for page:", pageName);
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-50">
         <Card className="w-full max-w-md">
@@ -191,8 +175,6 @@ export function RequireAuth({ children, pageName }) {
       </div>
     );
   }
-
-  console.log("RequireAuth - Rendering children");
   return <>{children}</>;
 }
 
